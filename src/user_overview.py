@@ -1,6 +1,7 @@
 from db_connection import fetch_data
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 # Queries for handset and manufacturer analysis
 QUERY_HANDSET = """
@@ -89,6 +90,48 @@ def visualize_data(handset_df, manufacturer_df, user_data):
     plt.show()
 
 
+# EDA - Descriptive Statistics
+def perform_eda(df):
+    print("\nDescriptive Statistics (Aggregated User Data):")
+    print(df.describe())
+
+    # Check for missing values
+    print("\nMissing Values in Aggregated Data:")
+    print(df.isna().sum())
+    
+    # Outlier detection (using IQR for session count)
+    Q1 = df['session_count'].quantile(0.25)
+    Q3 = df['session_count'].quantile(0.75)
+    IQR = Q3 - Q1
+    outliers = df[(df['session_count'] < (Q1 - 1.5 * IQR)) | (df['session_count'] > (Q3 + 1.5 * IQR))]
+    
+    print(f"\nNumber of Outliers (Session Count): {len(outliers)}")
+    return df
+
+# Segmentation - Divide Users into Decile Classes
+def segment_users(df):
+    # Compute total data volume
+    df['total_data'] = df['total_upload'] + df['total_download']
+    
+    # Segment into deciles based on session duration
+    df['decile_class'] = pd.qcut(df['total_duration'], 10, labels=False)
+    
+    # Aggregate total data per decile
+    decile_agg = df.groupby('decile_class')['total_data'].sum().reset_index()
+    
+    print("\nTotal Data Volume per Decile Class:")
+    print(decile_agg)
+    return df, decile_agg
+
+def visualize_segmentation(decile_agg):
+    plt.figure(figsize=(10, 6))
+    plt.bar(decile_agg['decile_class'], decile_agg['total_data'])
+    plt.title('Total Data Volume by Decile Class')
+    plt.xlabel('Decile Class')
+    plt.ylabel('Total Data Volume (Bytes)')
+    plt.xticks(decile_agg['decile_class'])
+    plt.show()
+
 
 if __name__ == "__main__":
     # Handset Analysis
@@ -100,16 +143,23 @@ if __name__ == "__main__":
     user_data = load_aggregated_user_data()
     print("\nAggregated User Data:\n", user_data.head(10))  # Display top 10 results
  
-    # Handset Analysis
+   # Handset and Manufacturer Analysis
     top_handsets = load_handset_data()
     top_manufacturers = load_manufacturer_data()
     top_per_manufacturer = load_top_handsets_per_manufacturer()
-
-     # User Data Aggregation
+    
+    # User Data Aggregation
     user_data = load_aggregated_user_data()
     
     # Data Cleaning
     user_data_cleaned = clean_aggregated_data(user_data)
     
+    # Perform EDA
+    user_data_eda = perform_eda(user_data_cleaned)
+    
+    # Segment Users into Deciles
+    segmented_data, decile_aggregation = segment_users(user_data_eda)
+    
     # Visualization
-    visualize_data(top_handsets, top_manufacturers, user_data_cleaned)
+    visualize_data(top_handsets, top_manufacturers, segmented_data)
+    visualize_segmentation(decile_aggregation)
