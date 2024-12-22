@@ -2,6 +2,9 @@ from db_connection import fetch_data
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import seaborn as sns
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 # Queries for handset and manufacturer analysis
 QUERY_HANDSET = """
@@ -28,16 +31,40 @@ ORDER BY count DESC;
 """
 
 # Query for user aggregation
+#QUERY_AGGREGATE_USERS = """
+#SELECT "MSISDN/Number",
+#       COUNT(*) AS session_count,
+ #      SUM("Total UL (Bytes)") AS total_upload,
+  #     SUM("Total DL (Bytes)") AS total_download,
+   #    SUM("Dur. (ms)") AS total_duration
+#FROM xdr_data
+#GROUP BY "MSISDN/Number"
+#ORDER BY session_count DESC;
+#"""
+
 QUERY_AGGREGATE_USERS = """
 SELECT "MSISDN/Number",
        COUNT(*) AS session_count,
        SUM("Total UL (Bytes)") AS total_upload,
        SUM("Total DL (Bytes)") AS total_download,
-       SUM("Dur. (ms)") AS total_duration
+       SUM("Dur. (ms)") AS total_duration,
+       SUM("Social Media DL (Bytes)") AS "Social Media DL (Bytes)",
+       SUM("Social Media UL (Bytes)") AS "Social Media UL (Bytes)",
+       SUM("Google DL (Bytes)") AS "Google DL (Bytes)",
+       SUM("Google UL (Bytes)") AS "Google UL (Bytes)",
+       SUM("Email DL (Bytes)") AS "Email DL (Bytes)",
+       SUM("Email UL (Bytes)") AS "Email UL (Bytes)",
+       SUM("Youtube DL (Bytes)") AS "Youtube DL (Bytes)",
+       SUM("Youtube UL (Bytes)") AS "Youtube UL (Bytes)",
+       SUM("Netflix DL (Bytes)") AS "Netflix DL (Bytes)",
+       SUM("Netflix UL (Bytes)") AS "Netflix UL (Bytes)",
+       SUM("Gaming DL (Bytes)") AS "Gaming DL (Bytes)",
+       SUM("Gaming UL (Bytes)") AS "Gaming UL (Bytes)"
 FROM xdr_data
 GROUP BY "MSISDN/Number"
 ORDER BY session_count DESC;
 """
+
 
 # Fetch data from DB for handsets
 def load_handset_data():
@@ -108,9 +135,9 @@ def perform_eda(df):
     print(f"\nNumber of Outliers (Session Count): {len(outliers)}")
     return df
 
-# Segmentation - Divide Users into Decile Classes
 def segment_users(df):
     # Compute total data volume
+    df = df.copy()  # Avoid SettingWithCopyWarning
     df['total_data'] = df['total_upload'] + df['total_download']
     
     # Segment into deciles based on session duration
@@ -123,6 +150,7 @@ def segment_users(df):
     print(decile_agg)
     return df, decile_agg
 
+
 def visualize_segmentation(decile_agg):
     plt.figure(figsize=(10, 6))
     plt.bar(decile_agg['decile_class'], decile_agg['total_data'])
@@ -131,6 +159,69 @@ def visualize_segmentation(decile_agg):
     plt.ylabel('Total Data Volume (Bytes)')
     plt.xticks(decile_agg['decile_class'])
     plt.show()
+
+# Correlation Analysis
+def correlation_analysis(df):
+    # Select relevant columns for correlation
+    corr_columns = [
+        "Social Media DL (Bytes)", "Social Media UL (Bytes)",
+        "Google DL (Bytes)", "Google UL (Bytes)",
+        "Email DL (Bytes)", "Email UL (Bytes)",
+        "Youtube DL (Bytes)", "Youtube UL (Bytes)",
+        "Netflix DL (Bytes)", "Netflix UL (Bytes)",
+        "Gaming DL (Bytes)", "Gaming UL (Bytes)"
+    ]
+    
+    # Compute correlation matrix
+    correlation_matrix = df[corr_columns].corr()
+    print("\nCorrelation Matrix:")
+    print(correlation_matrix)
+    
+    # Visualize as a heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(correlation_matrix, annot=True, fmt=".2f", cmap="coolwarm", cbar=True)
+    plt.title("Correlation Matrix")
+    plt.show()
+
+def perform_pca(df):
+    # Select numeric features for PCA
+    pca_columns = [
+        "Social Media DL (Bytes)", "Social Media UL (Bytes)",
+        "Google DL (Bytes)", "Google UL (Bytes)",
+        "Email DL (Bytes)", "Email UL (Bytes)",
+        "Youtube DL (Bytes)", "Youtube UL (Bytes)",
+        "Netflix DL (Bytes)", "Netflix UL (Bytes)",
+        "Gaming DL (Bytes)", "Gaming UL (Bytes)"
+    ]
+    
+    # Standardize data
+    scaler = StandardScaler()
+    scaled_data = scaler.fit_transform(df[pca_columns].fillna(0))
+    
+    # Perform PCA
+    pca = PCA(n_components=2)
+    pca_result = pca.fit_transform(scaled_data)
+    
+    # Create a copy before modifying
+    df = df.copy()
+    df.loc[:, 'PCA1'] = pca_result[:, 0]
+    df.loc[:, 'PCA2'] = pca_result[:, 1]
+    
+    print("\nExplained Variance Ratio by PCA Components:")
+    print(pca.explained_variance_ratio_)
+    
+    # Scatter plot of PCA results
+    plt.figure(figsize=(8, 6))
+    plt.scatter(df['PCA1'], df['PCA2'], alpha=0.5)
+    plt.title("PCA: 2 Principal Components")
+    plt.xlabel("PCA1")
+    plt.ylabel("PCA2")
+    plt.grid()
+    plt.show()
+    
+    return df
+
+
 
 
 if __name__ == "__main__":
@@ -159,6 +250,12 @@ if __name__ == "__main__":
     
     # Segment Users into Deciles
     segmented_data, decile_aggregation = segment_users(user_data_eda)
+
+    # Correlation Analysis
+    correlation_analysis(user_data_cleaned)
+    
+    # Perform PCA
+    segmented_data = perform_pca(user_data_cleaned)
     
     # Visualization
     visualize_data(top_handsets, top_manufacturers, segmented_data)
