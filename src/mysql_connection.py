@@ -1,6 +1,7 @@
 import mysql.connector
+import pandas as pd
 
-def execute_mysql_query(query, values):
+def execute_mysql_query(query, values=None):
     try:
         connection = mysql.connector.connect(
             host="localhost",
@@ -9,10 +10,21 @@ def execute_mysql_query(query, values):
             database="telecom_db"
         )
         cursor = connection.cursor()
-        cursor.executemany(query, values)
-        connection.commit()
-        print(f"{cursor.rowcount} records inserted successfully.")
+
+        if values:
+            cursor.execute(query, values)
+        else:
+            cursor.execute(query)
+
+        # Fetch all results immediately and return as DataFrame
+        result = cursor.fetchall()
+        columns = [desc[0] for desc in cursor.description]
+
         cursor.close()
         connection.close()
+
+        return pd.DataFrame(result, columns=columns)
+
     except mysql.connector.Error as err:
         print(f"Error: {err}")
+        return pd.DataFrame()
